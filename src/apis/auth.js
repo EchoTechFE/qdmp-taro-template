@@ -1,16 +1,14 @@
 import Taro from "@tarojs/taro";
-
-// ─── 配置（替换为你的应用信息） ───
-const APP_ID = ""; // TODO: 填入你的 appId
-const APP_SECRET = ""; // TODO: 填入你的 appSecret
-const AUTH_BASE = "https://openapi.qiandao.com";
-const AUTH_TOKEN_PATH = "/auth/v1/token";
-const AUTH_REFRESH_PATH = "/auth/v1/refresh";
-
-// ─── 存储 Key ───
-export const ACCESS_TOKEN_KEY = "QDMP_ACCESS_TOKEN";
-export const REFRESH_TOKEN_KEY = "QDMP_REFRESH_TOKEN";
-export const EXPIRES_AT_KEY = "QDMP_TOKEN_EXPIRES_AT";
+import {
+  APP_ID,
+  APP_SECRET,
+  AUTH_BASE,
+  AUTH_TOKEN_PATH,
+  AUTH_REFRESH_PATH,
+  ACCESS_TOKEN_KEY,
+  REFRESH_TOKEN_KEY,
+  EXPIRES_AT_KEY,
+} from "./config";
 
 // ─── Token 存取 ───
 function saveTokens(accessToken, refreshToken, expiresAt) {
@@ -41,11 +39,8 @@ export function tokenNeedsRefresh() {
   return exp - Math.floor(Date.now() / 1000) < 300;
 }
 
-// ─── 静默登录：Taro.login → 换取 accessToken ───
-export async function doLogin() {
-  const loginRes = await Taro.login();
-  const code = loginRes.code;
-
+// ─── 用 code 换取 token ───
+async function exchangeCodeForToken(code) {
   const res = await Taro.request({
     url: `${AUTH_BASE}${AUTH_TOKEN_PATH}`,
     method: "POST",
@@ -57,14 +52,50 @@ export async function doLogin() {
       grantType: "AUTHORIZATION_CODE",
     },
   });
+  return res;
+}
 
-  const json = res?.data ?? res;
-  if (!json || String(json.code) !== "0" || !json.data) {
-    const msg = json?.message || json?.errMsg || JSON.stringify(json) || "登录失败";
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+// ─── 登录：qd.login → 换取 accessToken ───
+export async function doLogin() {
+  let loginRes = await new Promise((resolve, reject) => {
+    Taro.login({
+      success: (res) => resolve(res),
+      fail: (err) => reject(err),
+    });
+  });
+  let code = loginRes.code;
+
+  let res = await exchangeCodeForToken(code);
+  let json = res?.data ?? res;
+
+  // code 过期/无效时，重新获取 code 再试一次
+  if (
+    json &&
+    String(json.code) !== "0" &&
+    /code|授权码|过期|expired|invalid/i.test(json.message || "")
+  ) {
+    loginRes = await new Promise((resolve, reject) => {
+      Taro.login({
+        success: (res) => resolve(res),
+        fail: (err) => reject(err),
+      });
+    });
+    code = loginRes.code;
+
+    res = await exchangeCodeForToken(code);
+    json = res?.data ?? res;
   }
 
-  saveTokens(json.data.accessToken, json.data.refreshToken, json.data.expiresAt);
+  if (!json || String(json.code) !== "0" || !json.data) {
+    const msg = json?.message || json?.errMsg || "登录失败";
+    throw new Error(msg);
+  }
+
+  saveTokens(
+    json.data.accessToken,
+    json.data.refreshToken,
+    json.data.expiresAt,
+  );
   return json.data;
 }
 
@@ -96,7 +127,9 @@ let refreshing = null;
 
 export function ensureRefresh() {
   if (!refreshing) {
-    refreshing = refreshToken().finally(() => { refreshing = null; });
+    refreshing = refreshToken().finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
 }

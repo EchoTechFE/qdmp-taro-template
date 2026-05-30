@@ -1,4 +1,7 @@
 {
-  "appId": "",
-  "loader": "EMP"
+  "appId": "echoBuGD9jxFdD2DrMlk",
+  "appSecret": "ej9NiXQzUSQUOLrlwzWGAEAnZdA7fn",
+  "loader": "EMP",
+  "name": "emp测试小程序",
+  "latest": "30"
 }

@@ -1,8 +1,8 @@
 {
   "miniprogramRoot": "./dist",
-  "projectname": "capability-support",
+  "projectname": "qdmp-taro-template",
   "description": "",
-  "appid": "",
+  "appid": "echoBuGD9jxFdD2DrMlk",
   "setting": {
     "urlCheck": true,
     "es6": false,

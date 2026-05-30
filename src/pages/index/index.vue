@@ -137,7 +137,7 @@
 
 <script>
 import { ref, onMounted } from "vue";
-import { doLogin, getAccessToken } from "../../apis/auth";
+import { doLogin, clearTokens } from "../../apis/auth";
 import { getSpuDetail } from "../../apis/spu";
 import "./index.scss";
 
@@ -184,12 +184,7 @@ export default {
     }
 
     onMounted(() => {
-      const token = getAccessToken();
-      if (token) {
-        isLoggedIn.value = true;
-      } else {
-        handleLogin();
-      }
+      clearTokens();
     });
 
     return {

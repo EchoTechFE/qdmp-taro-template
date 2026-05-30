@@ -1,7 +1,6 @@
 import Taro from "@tarojs/taro";
-import { ACCESS_TOKEN_KEY, tokenNeedsRefresh, ensureRefresh } from "./auth";
-
-const AUTH_REFRESH_PATH = "/auth/v1/refresh";
+import { tokenNeedsRefresh, ensureRefresh, doLogin, clearTokens } from "./auth";
+import { ACCESS_TOKEN_KEY, AUTH_REFRESH_PATH, OPENAPI_BASE, BACKEND_BASE } from "./config";
 
 /**
  * 创建带 access-token 自动注入的请求实例
@@ -44,12 +43,21 @@ export function createRequest(baseURL) {
         ...rest,
       });
 
+      // iOS 上 Taro.request 对非 2xx 可能不抛异常，需要主动检查
+      if (res.statusCode && res.statusCode >= 400) {
+        const err = new Error(`HTTP ${res.statusCode}`);
+        err.statusCode = res.statusCode;
+        err.data = res.data;
+        throw err;
+      }
+
       return res.data;
     } catch (err) {
       const status = err?.statusCode ?? err?.status;
 
       if (status === 401 && !isRefreshCall && !options._retried) {
         try {
+          // 先尝试 refreshToken 刷新
           const refreshData = await ensureRefresh();
           const newToken = refreshData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
           return request({
@@ -57,8 +65,20 @@ export function createRequest(baseURL) {
             _retried: true,
             header: { ...header, "access-token": newToken },
           });
-        } catch (e) {
-          throw err;
+        } catch (_refreshErr) {
+          // refresh 也失败了，清除旧 token，重新走静默登录
+          try {
+            clearTokens();
+            const loginData = await doLogin();
+            const newToken = loginData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
+            return request({
+              ...options,
+              _retried: true,
+              header: { ...header, "access-token": newToken },
+            });
+          } catch (_loginErr) {
+            throw err;
+          }
         }
       }
       throw err;
@@ -82,9 +102,7 @@ export function createRequest(baseURL) {
 }
 
 // 默认请求实例 — 指向千岛 OpenAPI
-export const api = createRequest("https://openapi.qiandao.com");
+export const api = createRequest(OPENAPI_BASE);
 
 // 后端服务请求实例 — 指向 FC 函数
-const BACKEND_BASE =
-  "https://qdmp-ecnwdsxjkf-epptunuweu.cn-shanghai.fcapp.run";
 export const backendApi = createRequest(BACKEND_BASE);
