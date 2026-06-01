@@ -7,12 +7,33 @@ const App = createApp({
     console.log("App onShow.");
   },
 });
-// Workaround: dimina pageFrame.js 的 Proxy getOwnPropertyDescriptor trap
-// 对不存在的属性返回 { writable: false } 的描述符，导致写入 xs 时抛 TypeError 白屏。
-// 预声明 xs 使其成为 setupState 上的真实属性，绕过伪造描述符分支。
+// 不可删除 修复白屏
+const DIMINA_PROXY_GUARD_KEYS = ["xs"];
+
+function patchDiminaSetupState(vm) {
+  const setupState = vm && vm.$ && vm.$.setupState;
+  if (!setupState || typeof setupState !== "object") return;
+
+  DIMINA_PROXY_GUARD_KEYS.forEach((key) => {
+    try {
+      const desc = Object.getOwnPropertyDescriptor(setupState, key);
+      if (desc && desc.writable) return;
+
+      Object.defineProperty(setupState, key, {
+        configurable: true,
+        enumerable: false,
+        writable: true,
+        value: undefined,
+      });
+    } catch (error) {
+      console.warn("Dimina setupState guard failed:", key, error);
+    }
+  });
+}
+
 App.mixin({
-  setup() {
-    return { xs: undefined };
+  beforeCreate() {
+    patchDiminaSetupState(this);
   },
 });
 export default App;
