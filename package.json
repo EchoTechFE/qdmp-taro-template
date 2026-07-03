@@ -12,8 +12,9 @@
   "scripts": {
     "build": "taro build --type weapp",
     "build:h5": "taro build --type h5",
-    "dev": "npm run build:h5 -- --watch",
-    "upload": "pnpm run build && qdmp build && qdmp upload"
+    "dev": "npm run build -- --watch",
+    "dev:h5": "npm run build:h5 -- --watch",
+    "upload": "qdmp build && qdmp upload"
   },
   "browserslist": [
     "last 3 versions",
