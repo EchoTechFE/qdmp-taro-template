@@ -18,7 +18,8 @@ export default defineConfig(async (merge, { command, mode }) => {
     sourceRoot: 'src',
     outputRoot: 'dist',
     plugins: [
-      "@tarojs/plugin-generator"
+      "@tarojs/plugin-generator",
+      "taro-plugin-qd"
     ],
     defineConstants: {
     },
