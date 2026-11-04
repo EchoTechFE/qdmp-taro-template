@@ -40,3 +40,5 @@ go run main.go
 发布完成须同时核对 build/deploy Job 成功、全部新副本 Ready、部署版本和两个健康端点；镜像标签变化不能单独证明服务已完成切换。
 
 登录代理使用固定的千岛 OpenAPI `/auth/v1/token` 上游，客户端仅可提交 code；应用凭据统一配置在项目根目录的 `qdmp-config.json`。本地后端直接读取该文件，正式发布时 CLI 从该文件读取并注入私有构建副本。缺少 AppSecret 时登录入口返回 503，健康检查仍可用。Token 刷新沿用原前端直接调用平台 `/auth/v1/refresh`，后端不增加刷新代理。禁止将客户端传来的 AppID、AppSecret 或任意上游 URL 透传到平台。
+
+登录换票的成功响应必须包含非空 accessToken、refreshToken、openId 及有效 expiresAt；缺失时返回脱敏错误，不重放登录 code，也不通过其他接口补齐身份。OpenID 来自平台 AUTHORIZATION_CODE 响应；前端只在完整校验成功后保存当前用户会话。

@@ -291,12 +291,52 @@ func applicationRoutes(cfg runtimeConfig, ready func(context.Context) error, cli
 			authError(response, http.StatusBadGateway, "认证服务响应无效")
 			return
 		}
+		envelope, _ := payload.(map[string]any)
+		if result.StatusCode >= http.StatusOK && result.StatusCode < http.StatusMultipleChoices && authCodeIsZero(envelope["code"]) && !validAuthSession(envelope["data"]) {
+			authError(response, http.StatusBadGateway, "认证服务成功响应不完整")
+			return
+		}
 		response.Header().Set("Content-Type", "application/json")
 		response.Header().Set("Cache-Control", "no-store")
 		response.WriteHeader(result.StatusCode)
 		_ = json.NewEncoder(response).Encode(redactAuthResponse(payload, cfg))
 	})
 	return mux
+}
+
+func authCodeIsZero(value any) bool {
+	switch code := value.(type) {
+	case string:
+		return code == "0"
+	case json.Number:
+		number, err := code.Float64()
+		return err == nil && number == 0
+	}
+	return false
+}
+
+func validAuthSession(value any) bool {
+	data, ok := value.(map[string]any)
+	if !ok {
+		return false
+	}
+	for _, key := range []string{"accessToken", "refreshToken", "openId"} {
+		text, ok := data[key].(string)
+		if !ok || strings.TrimSpace(text) == "" {
+			return false
+		}
+	}
+	var expiry string
+	switch value := data["expiresAt"].(type) {
+	case string:
+		expiry = strings.TrimSpace(value)
+	case json.Number:
+		expiry = string(value)
+	default:
+		return false
+	}
+	seconds, err := strconv.ParseFloat(expiry, 64)
+	return err == nil && !math.IsNaN(seconds) && !math.IsInf(seconds, 0) && seconds > 0 && seconds <= 9007199254740991 && math.Trunc(seconds) == seconds
 }
 
 func authCORS(response http.ResponseWriter) {

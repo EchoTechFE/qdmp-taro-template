@@ -33,7 +33,7 @@
 
 ### 环境要求
 
-- Node.js >= 18
+- Node.js 22.12+（22.x）、24.11+（24.x）或 26+，与完整构建所用 qdmp-cli 的要求一致
 - pnpm >= 10
 ### 安装依赖
 
@@ -81,11 +81,13 @@ POST 自身后端 /auth/v1/token  { code }
        ↓
 后端使用根 qdmp-config.json 的 appId / appSecret 请求平台
        ↓
-返回 accessToken / refreshToken / expiresAt → 存入 Storage
+返回 accessToken / refreshToken / expiresAt / openId → 校验后存入 Storage
        ↓
 后续请求自动注入 access-token 头，到期前主动刷新
 ```
 
+- 登录成功须同时通过 HTTP、业务 code 和完整会话校验；OpenID 只读取换票响应的 `data.openId`，不从 `user.me` 补齐
+- `getOpenId()` 读取当前用户身份；刷新保留原 refreshToken 与 OpenID，退出清理完整会话，旧异步结果不会覆盖新会话
 - token 到期前 5 分钟自动刷新
 - 并发请求共享同一个刷新 Promise，避免重复刷新
 - 请求层捕获 401 异常时，按原逻辑刷新 token 并重试一次

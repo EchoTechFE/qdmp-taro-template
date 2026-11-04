@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -41,7 +42,7 @@ func TestApplicationRoutesForwardOnlyServerCredentialsAndLoginCode(t *testing.T)
 		observed <- body
 		response.Header().Set("Content-Type", "application/json")
 		response.Header().Set("Set-Cookie", "upstream-private-cookie=must-not-forward")
-		_, _ = io.WriteString(response, `{"code":0,"data":{"accessToken":"new-user-access-token","refreshToken":"new-user-refresh-token","userId":9223372036854775807}}`)
+		_, _ = io.WriteString(response, `{"code":0,"data":{"accessToken":"new-user-access-token","refreshToken":"new-user-refresh-token","openId":"user-open-id","expiresAt":1893456000,"userId":9223372036854775807}}`)
 	}))
 	defer upstream.Close()
 	handler := applicationRoutes(cfg, func(context.Context) error {
@@ -61,6 +62,136 @@ func TestApplicationRoutesForwardOnlyServerCredentialsAndLoginCode(t *testing.T)
 	}
 	if result.Header().Get("Set-Cookie") != "" || result.Header().Get("Cache-Control") != "no-store" {
 		t.Fatal("token proxy must not forward upstream cookies or permit response caching")
+	}
+}
+
+func TestApplicationRoutesKeepCompleteTokenSessionsAndOriginalJSONTypes(t *testing.T) {
+	for _, body := range []string{
+		`{"code":"0","data":{"accessToken":"user-access-token","refreshToken":"user-refresh-token","openId":"user-open-id","expiresAt":"1893456000","userId":9223372036854775807}}`,
+		`{"code":0.0,"data":{"accessToken":"user-access-token","refreshToken":"user-refresh-token","openId":"user-open-id","expiresAt":1893456000.0,"userId":9223372036854775807}}`,
+	} {
+		calls := 0
+		client := authClientFunc(func(request *http.Request) (*http.Response, error) {
+			calls++
+			if request.URL.Path != "/auth/v1/token" {
+				t.Error("login must not query another identity endpoint")
+			}
+			return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body))}, nil
+		})
+		result := httptest.NewRecorder()
+		applicationRoutes(authTestConfig(), func(context.Context) error { return nil }, client, "https://upstream.invalid/auth/v1").ServeHTTP(result,
+			httptest.NewRequest(http.MethodPost, "/auth/v1/token", strings.NewReader(`{"code":"native-code"}`)))
+		var want, got any
+		for _, item := range []struct {
+			body   string
+			target *any
+		}{{body, &want}, {result.Body.String(), &got}} {
+			decoder := json.NewDecoder(strings.NewReader(item.body))
+			decoder.UseNumber()
+			if err := decoder.Decode(item.target); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if result.Code != http.StatusOK || !reflect.DeepEqual(got, want) || calls != 1 {
+			t.Fatal("complete token session or original numeric values changed, or login code was replayed")
+		}
+	}
+}
+
+func TestApplicationRoutesRejectIncompleteSuccessfulSessionsWithoutReplayingLoginCode(t *testing.T) {
+	cfg := authTestConfig()
+	for _, item := range []struct {
+		name, field string
+		value       any
+		omit        bool
+	}{
+		{"missing-open-id", "openId", nil, true},
+		{"empty-open-id", "openId", "", false},
+		{"whitespace-open-id", "openId", " ", false},
+		{"non-string-open-id", "openId", json.Number("123"), false},
+		{"missing-access-token", "accessToken", nil, true},
+		{"empty-access-token", "accessToken", "", false},
+		{"missing-refresh-token", "refreshToken", nil, true},
+		{"empty-refresh-token", "refreshToken", " ", false},
+		{"missing-expiry", "expiresAt", nil, true},
+		{"zero-expiry", "expiresAt", json.Number("0"), false},
+		{"negative-expiry", "expiresAt", json.Number("-1"), false},
+		{"fractional-expiry", "expiresAt", json.Number("1.5"), false},
+		{"unsafe-expiry", "expiresAt", json.Number("9007199254740992"), false},
+		{"overflow-expiry", "expiresAt", json.Number("1e400"), false},
+		{"invalid-expiry-string", "expiresAt", "not-a-timestamp", false},
+		{"boolean-expiry", "expiresAt", true, false},
+		{"null-expiry", "expiresAt", nil, false},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			data := map[string]any{"accessToken": "user-access-token", "refreshToken": "user-refresh-token", "openId": "user-open-id", "expiresAt": json.Number("1893456000")}
+			if item.omit {
+				delete(data, item.field)
+			} else {
+				data[item.field] = item.value
+			}
+			body, err := json.Marshal(map[string]any{"code": 0, "data": data, "appSecret": cfg.AppSecret, "message": "upstream detail " + cfg.AppSecret})
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			client := authClientFunc(func(request *http.Request) (*http.Response, error) {
+				calls++
+				if request.URL.Path != "/auth/v1/token" {
+					t.Error("incomplete login must not query another identity endpoint")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})
+			result := httptest.NewRecorder()
+			applicationRoutes(cfg, func(context.Context) error { return nil }, client, "https://upstream.invalid/auth/v1").ServeHTTP(result,
+				httptest.NewRequest(http.MethodPost, "/auth/v1/token", strings.NewReader(`{"code":"native-code"}`)))
+			if result.Code != http.StatusBadGateway || calls != 1 || strings.Contains(result.Body.String(), cfg.AppSecret) || strings.Contains(result.Body.String(), "user-access-token") {
+				t.Fatal("incomplete success must return a sanitized 502 without a second upstream call")
+			}
+			if result.Header().Get("Cache-Control") != "no-store" {
+				t.Fatal("incomplete token response must not be cached")
+			}
+		})
+	}
+}
+
+func TestApplicationRoutesRetainHTTPAndBusinessFailuresEvenWithIncompleteSessionData(t *testing.T) {
+	cfg := authTestConfig()
+	for _, item := range []struct {
+		name   string
+		status int
+		code   any
+	}{
+		{"http-401-with-zero-code", http.StatusUnauthorized, 0},
+		{"http-500-with-zero-code", http.StatusInternalServerError, "0"},
+		{"business-error", http.StatusOK, 10002},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			calls := 0
+			body, err := json.Marshal(map[string]any{"code": item.code, "data": map[string]any{}, "message": "upstream failure " + cfg.AppSecret, "appSecret": cfg.AppSecret})
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := authClientFunc(func(request *http.Request) (*http.Response, error) {
+				calls++
+				if request.URL.Path != "/auth/v1/token" {
+					t.Error("failed login must not query another identity endpoint")
+				}
+				return &http.Response{StatusCode: item.status, Body: io.NopCloser(bytes.NewReader(body))}, nil
+			})
+			result := httptest.NewRecorder()
+			applicationRoutes(cfg, func(context.Context) error { return nil }, client, "https://upstream.invalid/auth/v1").ServeHTTP(result,
+				httptest.NewRequest(http.MethodPost, "/auth/v1/token", strings.NewReader(`{"code":"native-code"}`)))
+			var got map[string]any
+			if err := json.Unmarshal(result.Body.Bytes(), &got); err != nil {
+				t.Fatal(err)
+			}
+			wantCode, _ := json.Marshal(item.code)
+			gotCode, _ := json.Marshal(got["code"])
+			if result.Code != item.status || string(gotCode) != string(wantCode) || calls != 1 || strings.Contains(result.Body.String(), cfg.AppSecret) {
+				t.Fatal("failure evidence changed, leaked credentials, or replayed the login code")
+			}
+		})
 	}
 }
 

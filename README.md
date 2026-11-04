@@ -34,7 +34,7 @@ qdmp backend package --json
 
 ## 后端行为
 
-后端监听 `8080`，暴露 `/healthz`（进程）与 `/readyz`（已启用的 MongoDB）。登录经自身正式域名 `https://<AppID>.qiandaomp.com/auth/v1/token`，前端仅发送 `Taro.login()` 的 code；Go 使用根目录 `qdmp-config.json` 中配置的 `appId`、`appSecret` 请求千岛 OpenAPI；本地运行直接读取该文件，正式发布由 CLI 从同一文件读取并注入私有构建副本。刷新 Token 沿用前端直连平台 `/auth/v1/refresh` 的原实现。启动页保留原有自动登录行为；未配置 AppID 时会在发起后端请求前报错。登录示例需要先部署后端。
+后端监听 `8080`，暴露 `/healthz`（进程）与 `/readyz`（已启用的 MongoDB）。登录经自身正式域名 `https://<AppID>.qiandaomp.com/auth/v1/token`，前端仅发送 `Taro.login()` 的 code；Go 使用根目录 `qdmp-config.json` 中配置的 `appId`、`appSecret` 请求千岛 OpenAPI；本地运行直接读取该文件，正式发布由 CLI 从同一文件读取并注入私有构建副本。刷新 Token 沿用前端直连平台 `/auth/v1/refresh` 的原实现。启动页保留原有自动登录行为；未配置 AppID 时会在发起后端请求前报错。登录示例需要先部署后端。成功换票须包含完整 Token、有效过期时间与 `data.openId`；前端保存并隔离当前会话，不从其他接口补齐身份。
 
 启用 MongoDB 时，所有副本共享同一数据库，禁止依赖本地文件保存业务状态。服务启动、就绪检查和登录代理的错误不会回显数据库连接串或应用凭据。
 
@@ -49,6 +49,7 @@ qdmp backend package --json
 ## 验证
 
 ```bash
+node --test frontend/test/auth.test.mjs
 cd backend
 go test ./...
 go build -o /tmp/qdmp-backend main.go
@@ -56,4 +57,4 @@ cd ..
 qdmp build
 ```
 
-最低 Go 版本为 `1.24`；Node.js 与 pnpm 要求见前端包配置。后端模板契约固定单入口 `main.go`，源配置标记保持为空，打包器仅在私有临时副本中注入实际配置。
+最低 Go 版本为 `1.24`；完整构建使用 Node.js 22.12+（22.x）、24.11+（24.x）或 26+，pnpm 按前端包的 packageManager 声明使用 10.14.0。后端模板契约固定单入口 `main.go`，源配置标记保持为空，打包器仅在私有临时副本中注入实际配置。

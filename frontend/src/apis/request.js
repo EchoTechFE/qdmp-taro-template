@@ -1,6 +1,6 @@
 import Taro from "@tarojs/taro";
 import { getBackendBase } from "./backend";
-import { ACCESS_TOKEN_KEY, tokenNeedsRefresh, ensureRefresh } from "./auth";
+import { getAccessToken, tokenNeedsRefresh, ensureRefresh } from "./auth";
 
 const AUTH_REFRESH_PATH = "/auth/v1/refresh";
 
@@ -17,12 +17,12 @@ export function createRequest(baseURL) {
       : `${typeof baseURL === "function" ? baseURL() : baseURL}${url}`;
     const isRefreshCall = url?.includes(AUTH_REFRESH_PATH);
 
-    let accessToken = Taro.getStorageSync(ACCESS_TOKEN_KEY);
+    let accessToken = getAccessToken();
 
     if (accessToken && !isRefreshCall && tokenNeedsRefresh()) {
       try {
         const refreshData = await ensureRefresh();
-        accessToken = refreshData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
+        accessToken = refreshData.accessToken || getAccessToken();
       } catch (e) {
         console.warn("[request] proactive refresh failed:", e);
       }
@@ -54,7 +54,7 @@ export function createRequest(baseURL) {
       if (status === 401 && !isRefreshCall && !options._retried) {
         try {
           const refreshData = await ensureRefresh();
-          const newToken = refreshData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
+          const newToken = refreshData.accessToken || getAccessToken();
           return request({
             ...options,
             _retried: true,
