@@ -43,11 +43,11 @@ pnpm install --frozen-lockfile
 
 ### 配置应用信息
 
-在项目根目录的全局配置文件 `qdmp-config.json` 中填写真实 `appId`、`appSecret`，保留其他配置字段。模板已直接包含该文件，克隆后即可填写，无需额外生成。AppSecret 由后端读取；前端只使用构建时准备的公开 AppID。AppSecret 变更后需重新打包部署后端。
+应用信息统一在[项目根主配置](../README.md#创建与配置)维护，前端只读取公开配置。
 
 常规构建在项目根目录执行 `qdmp build`，CLI 会自动准备 `frontend/qdmp.json`。如果直接在前端目录运行原生 Taro 命令，先在根目录执行 `qdmp config sync --json` 导出公开配置，再进入 `frontend/`。详见[全栈配置与发布说明](../README.md)。
 
-登录示例需先部署自身后端的 `/auth/v1/token`；刷新沿用前端直连平台 `/auth/v1/refresh` 的原实现。启动页保持原有自动登录行为，未配置 AppID 时会在请求前报错。
+示例使用模板后端，接口契约见[后端说明](../backend/README.md)；登录与会话规范见 [qdmp-skill 开发指南](https://github.com/EchoTechFE/qdmp-skill/blob/main/skills/qdmp-skill/knowledge/development-guide.md#用户登录换票与-openid)。
 
 ### 启动开发
 
@@ -71,26 +71,6 @@ pnpm build:h5
 # 构建并上传
 pnpm upload
 ```
-
-## 鉴权流程
-
-```
-Taro.login() → 获取 code
-       ↓
-POST 自身后端 /auth/v1/token  { code }
-       ↓
-后端使用根 qdmp-config.json 的 appId / appSecret 请求平台
-       ↓
-返回 accessToken / refreshToken / expiresAt / openId → 校验后存入 Storage
-       ↓
-后续请求自动注入 access-token 头，到期前主动刷新
-```
-
-- 登录成功须同时通过 HTTP、业务 code 和完整会话校验；OpenID 只读取换票响应的 `data.openId`，不从 `user.me` 补齐
-- `getOpenId()` 读取当前用户身份；刷新保留原 refreshToken 与 OpenID，退出清理完整会话，旧异步结果不会覆盖新会话
-- token 到期前 5 分钟自动刷新
-- 并发请求共享同一个刷新 Promise，避免重复刷新
-- 请求层捕获 401 异常时，按原逻辑刷新 token 并重试一次
 
 ## API 封装
 

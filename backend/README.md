@@ -2,7 +2,7 @@
 
 本模板仅包含正式环境的 Go HTTP 服务和可选 MongoDB，不依赖浏览器、开发环境后端或本地文件持久化。`backend-template.json` 声明模板自身的配置格式、运行时和构建入口契约。
 
-要求 Go 1.24 或更新版本。模板已直接提供项目根目录主配置 `qdmp-config.json`，克隆后即可填写。`qdmp create` 保留文件内容并设置权限为 `0600`，新项目中的实际配置按忽略规则保护；模板仓库仅提交空值。登录示例要求在项目根目录的全局配置文件 `qdmp-config.json` 中填写真实 `appId`、`appSecret`；发布也从此文件读取凭据：
+要求 Go 1.24 或更新版本。模板已直接提供项目根目录主配置 `qdmp-config.json`，克隆后即可填写。`qdmp create` 保留文件内容并设置权限为 `0600`，新项目中的实际配置按忽略规则保护；模板仓库仅提交空值。应用身份与服务端凭据由根主配置的 `appId`、`appSecret` 提供；发布也从此文件读取：
 
 已有后端但缺主配置时，执行 `qdmp config init --json` 补齐配置，不会覆盖 `backend/`。
 
@@ -39,6 +39,14 @@ go run main.go
 
 发布完成须同时核对 build/deploy Job 成功、全部新副本 Ready、部署版本和两个健康端点；镜像标签变化不能单独证明服务已完成切换。
 
-登录代理使用固定的千岛 OpenAPI `/auth/v1/token` 上游，客户端仅可提交 code；应用凭据统一配置在项目根目录的 `qdmp-config.json`。本地后端直接读取该文件，正式发布时 CLI 从该文件读取并注入私有构建副本。缺少 AppSecret 时登录入口返回 503，健康检查仍可用。Token 刷新沿用原前端直接调用平台 `/auth/v1/refresh`，后端不增加刷新代理。禁止将客户端传来的 AppID、AppSecret 或任意上游 URL 透传到平台。
+## 认证接口契约
 
-登录换票的成功响应必须包含非空 accessToken、refreshToken、openId 及有效 expiresAt；缺失时返回脱敏错误，不重放登录 code，也不通过其他接口补齐身份。OpenID 来自平台 AUTHORIZATION_CODE 响应；前端只在完整校验成功后保存当前用户会话。
+| 项目 | 当前实现 |
+| --- | --- |
+| 请求 | `POST /auth/v1/token`，JSON 请求体仅接受 `{ code }`。 |
+| 凭据与上游 | 后端从根主配置读取应用凭据，固定调用千岛 OpenAPI 同名路径；客户端不能指定应用凭据、授权类型或上游地址。 |
+| 成功响应 | `{ code: 0, data: { accessToken, refreshToken, expiresAt, openId } }`；不完整的上游成功响应返回脱敏错误。 |
+| 未配置凭据 | 缺少 AppSecret 时接口返回 503，健康检查仍可用。 |
+| 刷新 | 本后端不提供刷新代理；前端现有实现直连平台 `/auth/v1/refresh`。 |
+
+登录接入步骤、OpenID 来源及 Token / 会话处理规范统一见 [qdmp-skill 开发指南](https://github.com/EchoTechFE/qdmp-skill/blob/main/skills/qdmp-skill/knowledge/development-guide.md#用户登录换票与-openid)。

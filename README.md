@@ -20,7 +20,7 @@ cd ..
 
 模板直接包含根目录 `qdmp-config.json`，克隆后即可填写，无需额外生成或复制配置文件。`qdmp create` 校验完整模板后保留该文件内容，设置权限为 `0600` 并加入忽略规则；原有下载流程会移除模板的 `.git`，新项目中的实际配置不会沿用模板的 Git 跟踪记录。模板仓库仅提交空配置。
 
-登录示例要求先在项目根目录的全局配置文件 `qdmp-config.json` 中填写真实 `appId` 和 `appSecret`。`variables` 保存服务端 JSON 变量；需要 MongoDB 时同时填写 `mongodb.uri` 与等于 AppID 的 `mongodb.database`，均为空表示不启用数据库。秘密不能放进 `frontend/`、公开配置或日志。
+应用身份与服务端凭据统一填写在根目录 `qdmp-config.json` 的 `appId`、`appSecret` 字段。`variables` 保存服务端 JSON 变量；需要 MongoDB 时同时填写 `mongodb.uri` 与等于 AppID 的 `mongodb.database`，均为空表示不启用数据库。秘密不能放进 `frontend/`、公开配置或日志。
 
 ```bash
 # 项目根目录：从主配置准备公开前端元数据，然后编译
@@ -34,7 +34,7 @@ qdmp backend package --json
 
 ## 后端行为
 
-后端监听 `8080`，暴露 `/healthz`（进程）与 `/readyz`（已启用的 MongoDB）。登录经自身正式域名 `https://<AppID>.qiandaomp.com/auth/v1/token`，前端仅发送 `Taro.login()` 的 code；Go 使用根目录 `qdmp-config.json` 中配置的 `appId`、`appSecret` 请求千岛 OpenAPI；本地运行直接读取该文件，正式发布由 CLI 从同一文件读取并注入私有构建副本。刷新 Token 沿用前端直连平台 `/auth/v1/refresh` 的原实现。启动页保留原有自动登录行为；未配置 AppID 时会在发起后端请求前报错。登录示例需要先部署后端。成功换票须包含完整 Token、有效过期时间与 `data.openId`；前端保存并隔离当前会话，不从其他接口补齐身份。
+后端监听 `8080`，暴露 `/healthz`（进程）与 `/readyz`（已启用的 MongoDB）。认证接口的输入输出见[后端说明](backend/README.md)。登录换票、Token / OpenID 和会话处理规范统一维护在 [qdmp-skill 开发指南](https://github.com/EchoTechFE/qdmp-skill/blob/main/skills/qdmp-skill/knowledge/development-guide.md#用户登录换票与-openid)，模板不另行维护操作流程。
 
 启用 MongoDB 时，所有副本共享同一数据库，禁止依赖本地文件保存业务状态。服务启动、就绪检查和登录代理的错误不会回显数据库连接串或应用凭据。
 
