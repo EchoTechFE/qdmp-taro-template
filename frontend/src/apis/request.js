@@ -1,4 +1,5 @@
 import Taro from "@tarojs/taro";
+import { getBackendBase } from "./backend";
 import { ACCESS_TOKEN_KEY, tokenNeedsRefresh, ensureRefresh } from "./auth";
 
 const AUTH_REFRESH_PATH = "/auth/v1/refresh";
@@ -11,7 +12,9 @@ export function createRequest(baseURL) {
   const request = async (options) => {
     const { url, method = "GET", data, header = {}, ...rest } = options;
 
-    const fullUrl = url.startsWith("http") ? url : `${baseURL}${url}`;
+    const fullUrl = url.startsWith("http")
+      ? url
+      : `${typeof baseURL === "function" ? baseURL() : baseURL}${url}`;
     const isRefreshCall = url?.includes(AUTH_REFRESH_PATH);
 
     let accessToken = Taro.getStorageSync(ACCESS_TOKEN_KEY);
@@ -84,6 +87,5 @@ export function createRequest(baseURL) {
 // 默认请求实例 — 指向千岛 OpenAPI
 export const api = createRequest("https://openapi.qiandao.com");
 
-// 后端服务请求实例 — 填入你的后端服务地址
-const BACKEND_BASE = "";
-export const backendApi = createRequest(BACKEND_BASE);
+// 后端服务请求实例 — 域名来自构建时准备的公开 AppID。
+export const backendApi = createRequest(getBackendBase);

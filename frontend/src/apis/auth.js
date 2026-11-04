@@ -1,8 +1,9 @@
 import Taro from "@tarojs/taro";
 
-// ─── 配置（替换为你的应用信息） ───
-const APP_ID = ""; // TODO: 填入你的 appId
-const APP_SECRET = ""; // TODO: 填入你的 appSecret
+import { getBackendBase } from "./backend";
+
+// Configure appId and appSecret in the project-root qdmp-config.json.
+// The backend reads those credentials; the client sends only the login code.
 const AUTH_BASE = "https://openapi.qiandao.com";
 const AUTH_TOKEN_PATH = "/auth/v1/token";
 const AUTH_REFRESH_PATH = "/auth/v1/refresh";
@@ -43,19 +44,15 @@ export function tokenNeedsRefresh() {
 
 // ─── 静默登录：Taro.login → 换取 accessToken ───
 export async function doLogin() {
+  const backendBase = getBackendBase();
   const loginRes = await Taro.login();
   const code = loginRes.code;
 
   const res = await Taro.request({
-    url: `${AUTH_BASE}${AUTH_TOKEN_PATH}`,
+    url: `${backendBase}${AUTH_TOKEN_PATH}`,
     method: "POST",
     header: { "content-type": "application/json" },
-    data: {
-      appId: APP_ID,
-      appSecret: APP_SECRET,
-      code,
-      grantType: "AUTHORIZATION_CODE",
-    },
+    data: { code },
   });
 
   const json = res?.data ?? res;

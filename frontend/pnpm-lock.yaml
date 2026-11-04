@@ -57,7 +57,7 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2(@tarojs/service@4.2.0)(@tarojs/shared@4.2.0)
       vue:
-        specifier: ^3.0.0
+        specifier: ^3.4.0
         version: 3.5.34(typescript@6.0.3)
     devDependencies:
       '@babel/core':
