@@ -32,6 +32,8 @@ qdmp backend package --json
 
 无需手工执行 `qdmp config sync` 才能构建或发布。该命令仅供需要预先导出公开前端配置的旧工具使用。若直接在 `frontend/` 执行原生 Taro 命令，应先导出公开配置；使用 `qdmp build` 时 CLI 自动准备。
 
+旧项目应先执行 `qdmp config migrate --check --json` 和 `qdmp config migrate --json`，统一根主配置、`frontend/` 和真实 EMP 前端，保留已有后端语言与业务。后端就绪状态单独记录，不阻断仅前端操作；具体迁移规则见[后端说明](backend/README.md)。
+
 ## 后端行为
 
 后端监听 `8080`，暴露 `/healthz`（进程）与 `/readyz`（已启用的 MongoDB）。认证接口的输入输出见[后端说明](backend/README.md)。登录换票、Token / OpenID 和会话处理规范统一维护在 [qdmp-skill 开发指南](https://github.com/EchoTechFE/qdmp-skill/blob/main/skills/qdmp-skill/knowledge/development-guide.md#用户登录换票与-openid)，模板不另行维护操作流程。
@@ -42,7 +44,9 @@ qdmp backend package --json
 
 ## 发布
 
-发布顺序、变更审查、全栈与历史纯前端项目的范围判断，以及上线验收规范由 `qdmp-skill` 维护；`qdmp-cli` 执行打包、上传与部署。全栈项目先完成正式后端发布和验收，再构建上传前端；前端上传不会替代后端发布。后端包必须由 `qdmp backend package` 生成，不直接 zip 源码。
+发布范围、可选 diff 审查及上线验收规范由 `qdmp-skill` 维护；`qdmp-cli` 执行构建、上传与部署。全栈项目先完成正式后端发布和验收，再构建上传前端；明确仅前端或仅后端时只执行对应步骤。
+
+已明确部署时，执行 `qdmp backend deploy --description "<本次说明>" --json`。CLI 内部构建当前最新代码、校验归档与配置摘要、自动选择新补丁版本并直接发布，无需先单独打包或确认摘要。`--review` 为可选 diff 审查；仅独立构建检查时使用 `qdmp backend package --json`，不要直接 zip 源码。
 
 修改此仓库后，先合并模板变更，再发布依赖新布局的 CLI。仍为旧前端布局的模板会被新 CLI 明确拒绝，避免生成缺失后端的项目。
 

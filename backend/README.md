@@ -4,9 +4,11 @@
 
 要求 Go 1.24 或更新版本。模板已直接提供项目根目录主配置 `qdmp-config.json`，克隆后即可填写。`qdmp create` 保留文件内容并设置权限为 `0600`，新项目中的实际配置按忽略规则保护；模板仓库仅提交空值。应用身份与服务端凭据由根主配置的 `appId`、`appSecret` 提供；发布也从此文件读取：
 
-已有后端但缺主配置时，执行 `qdmp config init --json` 补齐配置，不会覆盖 `backend/`。
+旧项目根目录存在 `qdmp.json` 时，同级无 `backend/` 为纯前端，有该目录为全栈；空目录也算全栈，不存在纯后端小程序。先执行 `qdmp config migrate --check --json` 检查，再执行 `qdmp config migrate --json`，将前端工程移入 `frontend/`、提取根主配置，并完成真实 EMP 改造。原后端语言和业务保留，已有 Node 无须改写为 Go。
 
-历史纯前端项目添加服务端时，在原项目根目录执行 `qdmp backend init --json`。根目录或 `frontend/qdmp.json` 中的 AppID、开发 AppID、loader、name、latest 会首次继承到主配置，前端源码与目录保留；两处配置冲突时停止。已有主配置始终优先，前端配置不会反向覆盖它。
+`backendReadiness` 单独记录后端待完善项，不阻断仅前端的构建、调试或上传；实际执行后端操作时才检查原 runtime 的入口、配置和发布契约。当前 CLI 发布适配支持 `go` / `nodejs22`。
+
+`qdmp config init --json` 只补齐缺失主配置，不能代替旧项目迁移。已迁移的纯前端明确需要新增后端时，在项目根目录执行 `qdmp backend init --runtime go --json`；已有后端时拒绝覆盖。已有主配置始终优先，前端配置不会反向覆盖它，配置冲突先报告。迁移与发布规则以 `qdmp-skill` 为准。
 
 ```json
 {
@@ -33,7 +35,7 @@ go run main.go
 
 本地启动从 `../qdmp-config.json` 读取配置，可通过 `QDMP_CONFIG` 指定配置路径。端口固定 8080，入口层负责 HTTPS。`GET /healthz` 检查进程，`GET /readyz` 检查已启用的 MongoDB；SIGTERM 最多等待五秒排空 HTTP 请求。
 
-生产打包使用 `qdmp backend package`，不要直接 zip 本目录。平台只编译 `main.go`。打包器在私有临时副本注入正式配置并验证同一构建入口；源码中的配置标记必须保持为空。秘密仅能存在已忽略的本地配置、私有发布包及受控部署源码/镜像，禁止提交或输出到日志。发布包的权限、摘要与内容由 CLI 校验。
+已明确部署时，使用 `qdmp backend deploy --description "<本次说明>" --json`，CLI 内部构建当前最新代码、校验归档与配置摘要、自动选择新补丁版本并直接发布；`--review` 为可选 diff 审查。仅独立构建检查时使用 `qdmp backend package --json`，不要直接 zip 本目录。平台只编译 `main.go`。打包器在私有临时副本注入正式配置并验证同一构建入口；源码中的配置标记必须保持为空。秘密仅能存在已忽略的本地配置、私有发布包及受控部署源码/镜像，禁止提交或输出到日志。发布包的权限、摘要与内容由 CLI 校验。
 
 打包直接读取主配置；`qdmp config sync --json` 仅作为可选的公开前端配置导出，不是打包前置。
 
