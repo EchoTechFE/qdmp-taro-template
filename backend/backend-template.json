@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "1.0",
+  "runtime": "go",
+  "environment": "production",
+  "entrypoint": "main.go",
+  "build": ["go", "build", "main.go"],
+  "configMarker": "var embeddedProductionConfig string"
+}
