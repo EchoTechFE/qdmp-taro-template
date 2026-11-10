@@ -1,5 +1,6 @@
 import Taro from "@tarojs/taro";
-import { ACCESS_TOKEN_KEY, tokenNeedsRefresh, ensureRefresh } from "./auth";
+import { getBackendBase } from "./backend";
+import { getAccessToken, tokenNeedsRefresh, ensureRefresh, guardRequestSession } from "./auth";
 
 const AUTH_REFRESH_PATH = "/auth/v1/refresh";
 
@@ -11,18 +12,24 @@ export function createRequest(baseURL) {
   const request = async (options) => {
     const { url, method = "GET", data, header = {}, ...rest } = options;
 
-    const fullUrl = url.startsWith("http") ? url : `${baseURL}${url}`;
+    const fullUrl = url.startsWith("http")
+      ? url
+      : `${typeof baseURL === "function" ? baseURL() : baseURL}${url}`;
     const isRefreshCall = url?.includes(AUTH_REFRESH_PATH);
 
-    let accessToken = Taro.getStorageSync(ACCESS_TOKEN_KEY);
+    let accessToken = getAccessToken();
+    const assertRequestSession = guardRequestSession();
 
     if (accessToken && !isRefreshCall && tokenNeedsRefresh()) {
       try {
-        const refreshData = await ensureRefresh();
-        accessToken = refreshData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
+        await ensureRefresh();
       } catch (e) {
+        assertRequestSession();
+        if (!getAccessToken()) throw e;
         console.warn("[request] proactive refresh failed:", e);
       }
+      assertRequestSession();
+      accessToken = getAccessToken();
     }
 
     const headers = {
@@ -49,17 +56,15 @@ export function createRequest(baseURL) {
       const status = err?.statusCode ?? err?.status;
 
       if (status === 401 && !isRefreshCall && !options._retried) {
+        assertRequestSession();
         try {
-          const refreshData = await ensureRefresh();
-          const newToken = refreshData.accessToken || Taro.getStorageSync(ACCESS_TOKEN_KEY);
-          return request({
-            ...options,
-            _retried: true,
-            header: { ...header, "access-token": newToken },
-          });
-        } catch (e) {
+          await ensureRefresh();
+        } catch {
+          assertRequestSession();
           throw err;
         }
+        assertRequestSession();
+        return request({ ...options, _retried: true });
       }
       throw err;
     }
@@ -84,6 +89,5 @@ export function createRequest(baseURL) {
 // 默认请求实例 — 指向千岛 OpenAPI
 export const api = createRequest("https://openapi.qiandao.com");
 
-// 后端服务请求实例 — 填入你的后端服务地址
-const BACKEND_BASE = "";
-export const backendApi = createRequest(BACKEND_BASE);
+// 后端服务请求实例 — 域名来自构建时准备的公开 AppID。
+export const backendApi = createRequest(getBackendBase);

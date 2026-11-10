@@ -1,0 +1,9 @@
+{
+  "appId": "",
+  "appSecret": "",
+  "runtime": "go",
+  "environment": "production",
+  "loader": "EMP",
+  "mongodb": { "uri": "", "database": "" },
+  "variables": {}
+}
